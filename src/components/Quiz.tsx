@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   getQuestionsByDifficulty,
   difficulties,
@@ -17,6 +17,72 @@ import {
   Zap,
   ArrowLeft,
 } from "lucide-react";
+
+const audioCtxRef = { current: null as AudioContext | null };
+
+function getAudioCtx(): AudioContext {
+  if (!audioCtxRef.current) {
+    audioCtxRef.current = new AudioContext();
+  }
+  return audioCtxRef.current;
+}
+
+function playCorrectSound() {
+  const ctx = getAudioCtx();
+  const now = ctx.currentTime;
+
+  const osc1 = ctx.createOscillator();
+  const gain1 = ctx.createGain();
+  osc1.type = "sine";
+  osc1.frequency.setValueAtTime(523.25, now);
+  osc1.frequency.setValueAtTime(659.25, now + 0.1);
+  osc1.frequency.setValueAtTime(783.99, now + 0.2);
+  gain1.gain.setValueAtTime(0.3, now);
+  gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+  osc1.connect(gain1).connect(ctx.destination);
+  osc1.start(now);
+  osc1.stop(now + 0.4);
+
+  const osc2 = ctx.createOscillator();
+  const gain2 = ctx.createGain();
+  osc2.type = "sine";
+  osc2.frequency.setValueAtTime(783.99, now + 0.15);
+  osc2.frequency.setValueAtTime(1046.5, now + 0.25);
+  gain2.gain.setValueAtTime(0, now);
+  gain2.gain.setValueAtTime(0.25, now + 0.15);
+  gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+  osc2.connect(gain2).connect(ctx.destination);
+  osc2.start(now + 0.15);
+  osc2.stop(now + 0.5);
+}
+
+function playIncorrectSound() {
+  const ctx = getAudioCtx();
+  const now = ctx.currentTime;
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(220, now);
+  osc.frequency.linearRampToValueAtTime(180, now + 0.25);
+  gain.gain.setValueAtTime(0.2, now);
+  gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.35);
+
+  const osc2 = ctx.createOscillator();
+  const gain2 = ctx.createGain();
+  osc2.type = "square";
+  osc2.frequency.setValueAtTime(180, now + 0.12);
+  osc2.frequency.linearRampToValueAtTime(140, now + 0.35);
+  gain2.gain.setValueAtTime(0, now);
+  gain2.gain.setValueAtTime(0.12, now + 0.12);
+  gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+  osc2.connect(gain2).connect(ctx.destination);
+  osc2.start(now + 0.12);
+  osc2.stop(now + 0.45);
+}
 
 type Screen = "start" | "difficulty" | "quiz" | "results";
 
@@ -71,7 +137,10 @@ export default function Quiz() {
     if (selectedOption === null) return;
     setValidated(true);
     if (isCorrect) {
+      playCorrectSound();
       setCorrectCount((c) => c + 1);
+    } else {
+      playIncorrectSound();
     }
     const newAnswers = [...answers];
     newAnswers[currentIndex] = selectedOption;
