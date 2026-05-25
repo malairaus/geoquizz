@@ -1,7 +1,10 @@
-import { useState, useCallback, useRef } from "react";
+import { useState } from "react";
 import {
+  getQuestionBankByDifficulty,
   getQuestionsByDifficulty,
   difficulties,
+  QUESTIONS_PER_LEVEL,
+  QUESTIONS_PER_QUIZ,
   type Difficulty,
   type DifficultyInfo,
 } from "../data/questions";
@@ -95,8 +98,8 @@ const difficultyIcons: Record<Difficulty, React.ReactNode> = {
 function getEvaluation(score: number): string {
   if (score >= 90) return "Excelent!";
   if (score >= 70) return "Foarte bine!";
-  if (score >= 50) return "Mai exersează puțin.";
-  return "Reia materia și încearcă din nou.";
+  if (score >= 50) return "Mai exerseaza putin.";
+  return "Reia materia si incearca din nou.";
 }
 
 function getEvaluationColor(score: number): string {
@@ -113,24 +116,44 @@ function getScoreRingColor(score: number, diff: DifficultyInfo): string {
   return "stroke-red-500";
 }
 
+function initAnswers(len: number) {
+  return Array(len).fill(null) as (number | null)[];
+}
+
 export default function Quiz() {
   const [screen, setScreen] = useState<Screen>("start");
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [questions, setQuestions] = useState<Question[]>(() =>
+    getQuestionsByDifficulty("normal")
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [validated, setValidated] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
-  const [answers, setAnswers] = useState<(number | null)[]>([]);
+  const [answers, setAnswers] = useState<(number | null)[]>(() =>
+    initAnswers(QUESTIONS_PER_QUIZ)
+  );
 
-  const questions = getQuestionsByDifficulty(difficulty);
   const currentQuestion = questions[currentIndex];
   const isCorrect = selectedOption === currentQuestion?.correctIndex;
   const progress =
     ((currentIndex + (validated ? 1 : 0)) / questions.length) * 100;
   const diffInfo = difficulties.find((d) => d.key === difficulty)!;
+  const questionBankSize = getQuestionBankByDifficulty(difficulty).length;
 
-  function initAnswers(len: number) {
-    return Array(len).fill(null) as (number | null)[];
+  function resetQuizState(nextQuestions: Question[]) {
+    setQuestions(nextQuestions);
+    setCurrentIndex(0);
+    setSelectedOption(null);
+    setValidated(false);
+    setCorrectCount(0);
+    setAnswers(initAnswers(nextQuestions.length));
+  }
+
+  function startQuiz(d: Difficulty) {
+    setDifficulty(d);
+    resetQuizState(getQuestionsByDifficulty(d));
+    setScreen("quiz");
   }
 
   function handleValidate() {
@@ -159,25 +182,14 @@ export default function Quiz() {
 
   function handleRestart() {
     setScreen("start");
-    setCurrentIndex(0);
-    setSelectedOption(null);
-    setValidated(false);
-    setCorrectCount(0);
-    setAnswers([]);
+    resetQuizState(getQuestionsByDifficulty(difficulty));
   }
 
-  function handleSelectDifficulty(d: Difficulty) {
-    setDifficulty(d);
-    const qs = getQuestionsByDifficulty(d);
-    setAnswers(initAnswers(qs.length));
-    setCurrentIndex(0);
-    setSelectedOption(null);
-    setValidated(false);
-    setCorrectCount(0);
+  function handleRetakeSameLevel() {
+    resetQuizState(getQuestionsByDifficulty(difficulty));
     setScreen("quiz");
   }
 
-  // --- START SCREEN ---
   if (screen === "start") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-50 flex items-center justify-center p-4">
@@ -190,7 +202,7 @@ export default function Quiz() {
               Quiz de Geografie
             </h1>
             <p className="text-slate-500 text-lg">
-              Testează-ți cunoștințele de geografie
+              Testeaza-ti cunostintele de geografie
             </p>
           </div>
 
@@ -201,23 +213,23 @@ export default function Quiz() {
                   20
                 </div>
                 <span className="text-slate-600">
-                  Întrebări de geografie
+                  Intrebari random la fiecare quiz
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600 font-semibold text-sm">
-                  5p
+                  100
                 </div>
                 <span className="text-slate-600">
-                  Fiecare întrebare valorează 5 puncte
+                  Intrebari disponibile pentru fiecare nivel
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 font-semibold text-sm">
-                  100
+                  5p
                 </div>
                 <span className="text-slate-600">
-                  Scor maxim: 100 puncte
+                  Fiecare raspuns corect valoreaza 5 puncte
                 </span>
               </div>
             </div>
@@ -229,15 +241,15 @@ export default function Quiz() {
             </h3>
             <div className="flex flex-wrap gap-2">
               {[
-                "Continente și oceane",
+                "Continente si oceane",
                 "Forme de relief",
-                "Climă",
-                "Râuri și lacuri",
-                "Harta politică",
+                "Clima",
+                "Rauri si lacuri",
+                "Harta politica",
                 "Geografia Europei",
                 "Geografia Moldovei",
                 "Resurse naturale",
-                "Populație",
+                "Populatie",
                 "Economie",
               ].map((tag) => (
                 <span
@@ -261,7 +273,6 @@ export default function Quiz() {
     );
   }
 
-  // --- DIFFICULTY SELECTION SCREEN ---
   if (screen === "difficulty") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-50 flex items-center justify-center p-4">
@@ -271,7 +282,7 @@ export default function Quiz() {
             className="flex items-center gap-2 text-slate-500 hover:text-slate-700 transition-colors mb-6 group"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            <span className="text-sm font-medium">Înapoi</span>
+            <span className="text-sm font-medium">Inapoi</span>
           </button>
 
           <div className="text-center mb-8">
@@ -279,7 +290,7 @@ export default function Quiz() {
               Alege nivelul de dificultate
             </h2>
             <p className="text-slate-500">
-              Fiecare nivel conține 20 de întrebări diferite
+              Fiecare nivel contine {QUESTIONS_PER_LEVEL} de intrebari, iar quizul afiseaza {QUESTIONS_PER_QUIZ} random
             </p>
           </div>
 
@@ -287,7 +298,7 @@ export default function Quiz() {
             {difficulties.map((d) => (
               <button
                 key={d.key}
-                onClick={() => handleSelectDifficulty(d.key)}
+                onClick={() => startQuiz(d.key)}
                 className={`w-full text-left p-5 rounded-2xl border-2 transition-all duration-200 hover:shadow-lg active:scale-[0.99] group bg-white hover:border-transparent ${d.borderColor}`}
               >
                 <div className="flex items-start gap-4">
@@ -316,7 +327,6 @@ export default function Quiz() {
     );
   }
 
-  // --- RESULTS SCREEN ---
   if (screen === "results") {
     const score = correctCount * 5;
     const evaluation = getEvaluation(score);
@@ -336,7 +346,7 @@ export default function Quiz() {
             </div>
             <h2 className="text-2xl font-bold text-slate-800">Rezultate</h2>
             <p className="text-sm text-slate-400 mt-1">
-              Nivel: {diffInfo.label}
+              Nivel: {diffInfo.label} - set de 20 din {questionBankSize}
             </p>
           </div>
 
@@ -344,14 +354,7 @@ export default function Quiz() {
             <div className="flex justify-center mb-6">
               <div className="relative w-36 h-36">
                 <svg className="w-36 h-36 -rotate-90" viewBox="0 0 120 120">
-                  <circle
-                    cx="60"
-                    cy="60"
-                    r="54"
-                    fill="none"
-                    stroke="#f1f5f9"
-                    strokeWidth="8"
-                  />
+                  <circle cx="60" cy="60" r="54" fill="none" stroke="#f1f5f9" strokeWidth="8" />
                   <circle
                     cx="60"
                     cy="60"
@@ -366,9 +369,7 @@ export default function Quiz() {
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-3xl font-bold text-slate-800">
-                    {score}
-                  </span>
+                  <span className="text-3xl font-bold text-slate-800">{score}</span>
                   <span className="text-sm text-slate-400">din 100</span>
                 </div>
               </div>
@@ -382,32 +383,22 @@ export default function Quiz() {
               <div className="bg-emerald-50 rounded-xl p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5 mb-1">
                   <CheckCircle className="w-4 h-4 text-emerald-500" />
-                  <span className="text-sm text-emerald-600 font-medium">
-                    Corecte
-                  </span>
+                  <span className="text-sm text-emerald-600 font-medium">Corecte</span>
                 </div>
-                <span className="text-2xl font-bold text-emerald-700">
-                  {correctCount}
-                </span>
+                <span className="text-2xl font-bold text-emerald-700">{correctCount}</span>
               </div>
               <div className="bg-red-50 rounded-xl p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5 mb-1">
                   <XCircle className="w-4 h-4 text-red-400" />
-                  <span className="text-sm text-red-500 font-medium">
-                    Greșite
-                  </span>
+                  <span className="text-sm text-red-500 font-medium">Gresite</span>
                 </div>
-                <span className="text-2xl font-bold text-red-600">
-                  {questions.length - correctCount}
-                </span>
+                <span className="text-2xl font-bold text-red-600">{questions.length - correctCount}</span>
               </div>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6">
-            <h3 className="font-semibold text-slate-700 mb-4">
-              Rezumatul răspunsurilor
-            </h3>
+            <h3 className="font-semibold text-slate-700 mb-4">Rezumatul raspunsurilor</h3>
             <div className="grid grid-cols-10 gap-1.5">
               {questions.map((q, i) => {
                 const isAnswerCorrect = answers[i] === q.correctIndex;
@@ -419,7 +410,7 @@ export default function Quiz() {
                         ? "bg-emerald-100 text-emerald-700"
                         : "bg-red-100 text-red-600"
                     }`}
-                    title={`Întrebarea ${i + 1}: ${isAnswerCorrect ? "Corect" : "Greșit"}`}
+                    title={`Intrebarea ${i + 1}: ${isAnswerCorrect ? "Corect" : "Gresit"}`}
                   >
                     {i + 1}
                   </div>
@@ -430,11 +421,11 @@ export default function Quiz() {
 
           <div className="space-y-3">
             <button
-              onClick={handleRestart}
+              onClick={handleRetakeSameLevel}
               className={`w-full py-4 px-6 bg-gradient-to-r ${diffInfo.bgGradient} text-white font-semibold rounded-xl shadow-lg ${diffInfo.shadowColor} hover:shadow-xl transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 text-lg`}
             >
               <RotateCcw className="w-5 h-5" />
-              Reia Quizul
+              Reia Quizul cu intrebari random
             </button>
             <button
               onClick={() => setScreen("difficulty")}
@@ -448,31 +439,26 @@ export default function Quiz() {
     );
   }
 
-  // --- QUIZ SCREEN ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-50 flex items-center justify-center p-4">
       <div className="max-w-lg w-full">
-        {/* Header with difficulty badge */}
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={handleRestart}
             className="flex items-center gap-2 text-slate-500 hover:text-slate-700 transition-colors group"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            <span className="text-sm font-medium">Ieși</span>
+            <span className="text-sm font-medium">Iesi</span>
           </button>
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r ${diffInfo.bgGradient} text-white`}
-          >
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r ${diffInfo.bgGradient} text-white`}>
             {diffInfo.label}
           </span>
         </div>
 
-        {/* Progress bar */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-slate-500">
-              Întrebarea {currentIndex + 1} din {questions.length}
+              Intrebarea {currentIndex + 1} din {questions.length}
             </span>
             <span className="text-sm font-medium text-slate-500">
               {correctCount * 5} pct
@@ -486,7 +472,6 @@ export default function Quiz() {
           </div>
         </div>
 
-        {/* Question card */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-4">
           <h2 className="text-lg font-semibold text-slate-800 leading-relaxed mb-6">
             {currentQuestion.text}
@@ -494,16 +479,13 @@ export default function Quiz() {
 
           <div className="space-y-3">
             {currentQuestion.options.map((option, index) => {
-              let optionStyle =
-                "border-slate-200 hover:border-sky-300 hover:bg-sky-50/50";
+              let optionStyle = "border-slate-200 hover:border-sky-300 hover:bg-sky-50/50";
 
               if (validated) {
                 if (index === currentQuestion.correctIndex) {
-                  optionStyle =
-                    "border-emerald-400 bg-emerald-50 ring-1 ring-emerald-400";
+                  optionStyle = "border-emerald-400 bg-emerald-50 ring-1 ring-emerald-400";
                 } else if (index === selectedOption && !isCorrect) {
-                  optionStyle =
-                    "border-red-400 bg-red-50 ring-1 ring-red-400";
+                  optionStyle = "border-red-400 bg-red-50 ring-1 ring-red-400";
                 } else {
                   optionStyle = "border-slate-100 opacity-50";
                 }
@@ -513,15 +495,13 @@ export default function Quiz() {
 
               return (
                 <button
-                  key={index}
+                  key={option}
                   onClick={() => {
                     if (!validated) setSelectedOption(index);
                   }}
                   disabled={validated}
                   className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${optionStyle} ${
-                    !validated
-                      ? "cursor-pointer active:scale-[0.99]"
-                      : "cursor-default"
+                    !validated ? "cursor-pointer active:scale-[0.99]" : "cursor-default"
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -562,13 +542,10 @@ export default function Quiz() {
           </div>
         </div>
 
-        {/* Explanation */}
         {validated && (
           <div
             className={`rounded-2xl p-5 mb-4 border ${
-              isCorrect
-                ? "bg-emerald-50 border-emerald-200"
-                : "bg-amber-50 border-amber-200"
+              isCorrect ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"
             }`}
           >
             <div className="flex items-start gap-3">
@@ -578,26 +555,15 @@ export default function Quiz() {
                 <XCircle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
               )}
               <div>
-                <p
-                  className={`font-semibold mb-1 ${
-                    isCorrect ? "text-emerald-700" : "text-amber-700"
-                  }`}
-                >
-                  {isCorrect ? "Răspuns corect!" : "Răspuns incorect"}
+                <p className={`font-semibold mb-1 ${isCorrect ? "text-emerald-700" : "text-amber-700"}`}>
+                  {isCorrect ? "Raspuns corect!" : "Raspuns incorect"}
                 </p>
                 {!isCorrect && (
                   <p className="text-sm text-amber-600 mb-1">
-                    Varianta corectă:{" "}
-                    <span className="font-semibold">
-                      {currentQuestion.options[currentQuestion.correctIndex]}
-                    </span>
+                    Varianta corecta: <span className="font-semibold">{currentQuestion.options[currentQuestion.correctIndex]}</span>
                   </p>
                 )}
-                <p
-                  className={`text-sm ${
-                    isCorrect ? "text-emerald-600" : "text-amber-600"
-                  }`}
-                >
+                <p className={`text-sm ${isCorrect ? "text-emerald-600" : "text-amber-600"}`}>
                   {currentQuestion.explanation}
                 </p>
               </div>
@@ -605,7 +571,6 @@ export default function Quiz() {
           </div>
         )}
 
-        {/* Action buttons */}
         <div className="flex gap-3">
           {!validated ? (
             <button
@@ -617,7 +582,7 @@ export default function Quiz() {
                   : `bg-gradient-to-r ${diffInfo.bgGradient} text-white shadow-lg ${diffInfo.shadowColor} hover:shadow-xl`
               }`}
             >
-              Validează
+              Valideaza
             </button>
           ) : (
             <button
@@ -626,7 +591,7 @@ export default function Quiz() {
             >
               {currentIndex < questions.length - 1 ? (
                 <>
-                  Următoarea întrebare
+                  Urmatoarea intrebare
                   <ChevronRight className="w-5 h-5" />
                 </>
               ) : (
