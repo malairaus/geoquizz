@@ -165,6 +165,15 @@ function prefixedFacts(facts: Fact[], levelOffset: number): Question[] {
   );
 }
 
+function shuffleItems<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 function shuffleOptions(options: string[], seed: number): string[] {
   return [...options].sort((a, b) => {
     const left = Math.sin((seed + a.length) * 999) * 10000;
@@ -173,25 +182,29 @@ function shuffleOptions(options: string[], seed: number): string[] {
   });
 }
 
-function shuffleQuestions(questions: Question[]): Question[] {
-  const copy = [...questions];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
 const questionBanks: Record<Difficulty, Question[]> = {
   normal: prefixedFacts(normalFacts, 0),
   competitiv: prefixedFacts(competitivFacts, 1000),
   olimpic: prefixedFacts(olimpicFacts, 2000),
 };
 
+function getFactGroupId(question: Question): number {
+  return Math.floor(((question.id % 1000) - 1) / 4);
+}
+
 export function getQuestionBankByDifficulty(difficulty: Difficulty): Question[] {
   return questionBanks[difficulty];
 }
 
 export function getQuestionsByDifficulty(difficulty: Difficulty): Question[] {
-  return shuffleQuestions(questionBanks[difficulty]).slice(0, QUESTIONS_PER_QUIZ);
+  const groups = new Map<number, Question[]>();
+
+  for (const question of questionBanks[difficulty]) {
+    const groupId = getFactGroupId(question);
+    groups.set(groupId, [...(groups.get(groupId) ?? []), question]);
+  }
+
+  return shuffleItems([...groups.values()])
+    .slice(0, QUESTIONS_PER_QUIZ)
+    .map((group) => shuffleItems(group)[0]);
 }
