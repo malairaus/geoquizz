@@ -55,6 +55,15 @@ export const difficulties: DifficultyInfo[] = [
   },
 ];
 
+const repeatedNormalIndexes = new Set([
+  33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+  43, 44, 45, 46, 47,
+]);
+
+const curatedNormalDrafts = normalDrafts.filter(
+  (_, index) => !repeatedNormalIndexes.has(index)
+);
+
 function makeQuestion(draft: DraftQuestion, id: number): Question {
   const options = shuffleOptions([draft.correct, ...draft.wrong], id);
 
@@ -68,11 +77,13 @@ function makeQuestion(draft: DraftQuestion, id: number): Question {
 }
 
 function makeQuestions(drafts: DraftQuestion[], offset: number): Question[] {
-  if (drafts.length !== QUESTIONS_PER_LEVEL) {
-    console.warn(`Expected ${QUESTIONS_PER_LEVEL} questions, received ${drafts.length}.`);
+  const selectedDrafts = drafts.slice(0, QUESTIONS_PER_LEVEL);
+
+  if (selectedDrafts.length !== QUESTIONS_PER_LEVEL) {
+    console.warn(`Expected ${QUESTIONS_PER_LEVEL} questions, received ${selectedDrafts.length}.`);
   }
 
-  return drafts.map((draft, index) => makeQuestion(draft, offset + index + 1));
+  return selectedDrafts.map((draft, index) => makeQuestion(draft, offset + index + 1));
 }
 
 function shuffleItems<T>(items: T[]): T[] {
@@ -95,7 +106,7 @@ function shuffleOptions(options: string[], seed: number): string[] {
 }
 
 const questionBanks: Record<Difficulty, Question[]> = {
-  normal: makeQuestions(normalDrafts, 0),
+  normal: makeQuestions(curatedNormalDrafts, 0),
   competitiv: makeQuestions(competitiveDrafts, 1000),
   olimpic: makeQuestions(olympicDrafts, 2000),
 };
