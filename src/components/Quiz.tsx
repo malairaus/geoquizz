@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getQuestionBankByDifficulty,
   getQuestionsByDifficulty,
@@ -10,15 +10,16 @@ import {
 } from "../data/questions";
 import type { Question } from "../data/questions";
 import {
-  Globe,
-  CheckCircle,
-  XCircle,
-  ChevronRight,
-  RotateCcw,
-  Trophy,
-  Shield,
-  Zap,
   ArrowLeft,
+  CheckCircle,
+  ChevronRight,
+  Clock,
+  Globe,
+  RotateCcw,
+  Shield,
+  Trophy,
+  XCircle,
+  Zap,
 } from "lucide-react";
 
 const audioCtxRef = { current: null as AudioContext | null };
@@ -30,61 +31,20 @@ function getAudioCtx(): AudioContext {
   return audioCtxRef.current;
 }
 
-function playCorrectSound() {
+function playTone(isCorrect: boolean) {
   const ctx = getAudioCtx();
   const now = ctx.currentTime;
-
-  const osc1 = ctx.createOscillator();
-  const gain1 = ctx.createGain();
-  osc1.type = "sine";
-  osc1.frequency.setValueAtTime(523.25, now);
-  osc1.frequency.setValueAtTime(659.25, now + 0.1);
-  osc1.frequency.setValueAtTime(783.99, now + 0.2);
-  gain1.gain.setValueAtTime(0.3, now);
-  gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-  osc1.connect(gain1).connect(ctx.destination);
-  osc1.start(now);
-  osc1.stop(now + 0.4);
-
-  const osc2 = ctx.createOscillator();
-  const gain2 = ctx.createGain();
-  osc2.type = "sine";
-  osc2.frequency.setValueAtTime(783.99, now + 0.15);
-  osc2.frequency.setValueAtTime(1046.5, now + 0.25);
-  gain2.gain.setValueAtTime(0, now);
-  gain2.gain.setValueAtTime(0.25, now + 0.15);
-  gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
-  osc2.connect(gain2).connect(ctx.destination);
-  osc2.start(now + 0.15);
-  osc2.stop(now + 0.5);
-}
-
-function playIncorrectSound() {
-  const ctx = getAudioCtx();
-  const now = ctx.currentTime;
-
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = "sawtooth";
-  osc.frequency.setValueAtTime(220, now);
-  osc.frequency.linearRampToValueAtTime(180, now + 0.25);
-  gain.gain.setValueAtTime(0.2, now);
+
+  osc.type = isCorrect ? "sine" : "sawtooth";
+  osc.frequency.setValueAtTime(isCorrect ? 523.25 : 220, now);
+  osc.frequency.linearRampToValueAtTime(isCorrect ? 783.99 : 150, now + 0.25);
+  gain.gain.setValueAtTime(isCorrect ? 0.24 : 0.18, now);
   gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
   osc.connect(gain).connect(ctx.destination);
   osc.start(now);
   osc.stop(now + 0.35);
-
-  const osc2 = ctx.createOscillator();
-  const gain2 = ctx.createGain();
-  osc2.type = "square";
-  osc2.frequency.setValueAtTime(180, now + 0.12);
-  osc2.frequency.linearRampToValueAtTime(140, now + 0.35);
-  gain2.gain.setValueAtTime(0, now);
-  gain2.gain.setValueAtTime(0.12, now + 0.12);
-  gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
-  osc2.connect(gain2).connect(ctx.destination);
-  osc2.start(now + 0.12);
-  osc2.stop(now + 0.45);
 }
 
 type Screen = "start" | "difficulty" | "quiz" | "results";
@@ -93,6 +53,12 @@ const difficultyIcons: Record<Difficulty, React.ReactNode> = {
   normal: <Globe className="w-6 h-6" />,
   competitiv: <Shield className="w-6 h-6" />,
   olimpic: <Zap className="w-6 h-6" />,
+};
+
+const timeByDifficulty: Record<Difficulty, number> = {
+  normal: 3 * 60,
+  competitiv: 5 * 60,
+  olimpic: 8 * 60,
 };
 
 function getEvaluation(score: number): string {
@@ -109,7 +75,7 @@ function getEvaluationColor(score: number): string {
   return "text-red-500";
 }
 
-function getScoreRingColor(score: number, diff: DifficultyInfo): string {
+function getScoreRingColor(score: number): string {
   if (score >= 90) return "stroke-emerald-500";
   if (score >= 70) return "stroke-blue-500";
   if (score >= 50) return "stroke-amber-500";
@@ -118,6 +84,16 @@ function getScoreRingColor(score: number, diff: DifficultyInfo): string {
 
 function initAnswers(len: number) {
   return Array(len).fill(null) as (number | null)[];
+}
+
+function formatTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}:${rest.toString().padStart(2, "0")}`;
+}
+
+function getTimeLabel(difficulty: Difficulty) {
+  return formatTime(timeByDifficulty[difficulty]);
 }
 
 export default function Quiz() {
@@ -133,6 +109,8 @@ export default function Quiz() {
   const [answers, setAnswers] = useState<(number | null)[]>(() =>
     initAnswers(QUESTIONS_PER_QUIZ)
   );
+  const [timeLeft, setTimeLeft] = useState(timeByDifficulty.normal);
+  const [timedOut, setTimedOut] = useState(false);
 
   const currentQuestion = questions[currentIndex];
   const isCorrect = selectedOption === currentQuestion?.correctIndex;
@@ -141,30 +119,50 @@ export default function Quiz() {
   const diffInfo = difficulties.find((d) => d.key === difficulty)!;
   const questionBankSize = getQuestionBankByDifficulty(difficulty).length;
 
-  function resetQuizState(nextQuestions: Question[]) {
+  useEffect(() => {
+    if (screen !== "quiz" || timeLeft <= 0) return;
+
+    const timerId = window.setInterval(() => {
+      setTimeLeft((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [screen, timeLeft]);
+
+  useEffect(() => {
+    if (screen === "quiz" && timeLeft === 0) {
+      setTimedOut(true);
+      setScreen("results");
+    }
+  }, [screen, timeLeft]);
+
+  function resetQuizState(nextQuestions: Question[], nextDifficulty: Difficulty) {
     setQuestions(nextQuestions);
     setCurrentIndex(0);
     setSelectedOption(null);
     setValidated(false);
     setCorrectCount(0);
     setAnswers(initAnswers(nextQuestions.length));
+    setTimeLeft(timeByDifficulty[nextDifficulty]);
+    setTimedOut(false);
   }
 
   function startQuiz(d: Difficulty) {
     setDifficulty(d);
-    resetQuizState(getQuestionsByDifficulty(d));
+    resetQuizState(getQuestionsByDifficulty(d), d);
     setScreen("quiz");
   }
 
   function handleValidate() {
-    if (selectedOption === null) return;
+    if (selectedOption === null || timeLeft === 0) return;
+
     setValidated(true);
+    playTone(isCorrect);
+
     if (isCorrect) {
-      playCorrectSound();
       setCorrectCount((c) => c + 1);
-    } else {
-      playIncorrectSound();
     }
+
     const newAnswers = [...answers];
     newAnswers[currentIndex] = selectedOption;
     setAnswers(newAnswers);
@@ -182,11 +180,11 @@ export default function Quiz() {
 
   function handleRestart() {
     setScreen("start");
-    resetQuizState(getQuestionsByDifficulty(difficulty));
+    resetQuizState(getQuestionsByDifficulty(difficulty), difficulty);
   }
 
   function handleRetakeSameLevel() {
-    resetQuizState(getQuestionsByDifficulty(difficulty));
+    resetQuizState(getQuestionsByDifficulty(difficulty), difficulty);
     setScreen("quiz");
   }
 
@@ -213,7 +211,7 @@ export default function Quiz() {
                   20
                 </div>
                 <span className="text-slate-600">
-                  Intrebari random la fiecare quiz
+                  Intrebari random fara repetari in aceeasi sesiune
                 </span>
               </div>
               <div className="flex items-center gap-3">
@@ -221,44 +219,15 @@ export default function Quiz() {
                   100
                 </div>
                 <span className="text-slate-600">
-                  Intrebari disponibile pentru fiecare nivel
+                  Intrebari distincte pentru fiecare nivel
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 font-semibold text-sm">
-                  5p
-                </div>
+                <Clock className="w-8 h-8 rounded-lg bg-amber-50 p-1.5 text-amber-600" />
                 <span className="text-slate-600">
-                  Fiecare raspuns corect valoreaza 5 puncte
+                  Timp: Normal 3 min, Competitiv 5 min, Olimpic 8 min
                 </span>
               </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
-            <h3 className="font-semibold text-slate-700 mb-3">
-              Teme acoperite:
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {[
-                "Continente si oceane",
-                "Forme de relief",
-                "Clima",
-                "Rauri si lacuri",
-                "Harta politica",
-                "Geografia Europei",
-                "Geografia Moldovei",
-                "Resurse naturale",
-                "Populatie",
-                "Economie",
-              ].map((tag) => (
-                <span
-                  key={tag}
-                  className="px-3 py-1 bg-slate-50 text-slate-600 rounded-full text-sm border border-slate-100"
-                >
-                  {tag}
-                </span>
-              ))}
             </div>
           </div>
 
@@ -308,16 +277,20 @@ export default function Quiz() {
                     {difficultyIcons[d.key]}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between gap-3 mb-1">
                       <h3 className="font-bold text-slate-800 text-lg">
                         {d.label}
                       </h3>
-                      <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">
+                        <Clock className="w-3.5 h-3.5" />
+                        {getTimeLabel(d.key)}
+                      </span>
                     </div>
                     <p className="text-sm text-slate-500 leading-relaxed">
                       {d.description}
                     </p>
                   </div>
+                  <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
                 </div>
               </button>
             ))}
@@ -329,9 +302,9 @@ export default function Quiz() {
 
   if (screen === "results") {
     const score = correctCount * 5;
-    const evaluation = getEvaluation(score);
-    const evalColor = getEvaluationColor(score);
-    const ringColor = getScoreRingColor(score, diffInfo);
+    const evaluation = timedOut ? "Timpul a expirat." : getEvaluation(score);
+    const evalColor = timedOut ? "text-amber-600" : getEvaluationColor(score);
+    const ringColor = getScoreRingColor(score);
     const circumference = 2 * Math.PI * 54;
     const offset = circumference - (score / 100) * circumference;
 
@@ -390,7 +363,7 @@ export default function Quiz() {
               <div className="bg-red-50 rounded-xl p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5 mb-1">
                   <XCircle className="w-4 h-4 text-red-400" />
-                  <span className="text-sm text-red-500 font-medium">Gresite</span>
+                  <span className="text-sm text-red-500 font-medium">Gresite / necompletate</span>
                 </div>
                 <span className="text-2xl font-bold text-red-600">{questions.length - correctCount}</span>
               </div>
@@ -410,7 +383,7 @@ export default function Quiz() {
                         ? "bg-emerald-100 text-emerald-700"
                         : "bg-red-100 text-red-600"
                     }`}
-                    title={`Intrebarea ${i + 1}: ${isAnswerCorrect ? "Corect" : "Gresit"}`}
+                    title={`Intrebarea ${i + 1}: ${isAnswerCorrect ? "Corect" : "Gresit/necompletat"}`}
                   >
                     {i + 1}
                   </div>
@@ -450,9 +423,19 @@ export default function Quiz() {
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
             <span className="text-sm font-medium">Iesi</span>
           </button>
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r ${diffInfo.bgGradient} text-white`}>
-            {diffInfo.label}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r ${diffInfo.bgGradient} text-white`}>
+              {diffInfo.label}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
+                timeLeft <= 30 ? "bg-red-100 text-red-600" : "bg-white text-slate-600 border border-slate-200"
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              {formatTime(timeLeft)}
+            </span>
+          </div>
         </div>
 
         <div className="mb-6">
