@@ -258,7 +258,7 @@ export default function Quiz() {
                   20
                 </div>
                 <span className="text-slate-600">
-                  Intrebari pe runda, fara repetari pana se epuizeaza nivelul
+                  Intrebari pe runda
                 </span>
               </div>
               <div className="flex items-center gap-3">
