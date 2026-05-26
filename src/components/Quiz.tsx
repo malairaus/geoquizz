@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   getQuestionBankByDifficulty,
-  getQuestionsByDifficulty,
   difficulties,
   QUESTIONS_PER_LEVEL,
   QUESTIONS_PER_QUIZ,
@@ -48,8 +47,9 @@ function playTone(isCorrect: boolean) {
 }
 
 type Screen = "start" | "difficulty" | "quiz" | "results";
+type QuestionDecks = Record<Difficulty, Question[]>;
 
-const difficultyIcons: Record<Difficulty, React.ReactNode> = {
+const difficultyIcons: Record<Difficulty, ReactNode> = {
   normal: <Globe className="w-6 h-6" />,
   competitiv: <Shield className="w-6 h-6" />,
   olimpic: <Zap className="w-6 h-6" />,
@@ -60,6 +60,41 @@ const timeByDifficulty: Record<Difficulty, number> = {
   competitiv: 5 * 60,
   olimpic: 8 * 60,
 };
+
+function shuffleItems<T>(items: T[]): T[] {
+  const shuffled = [...items];
+
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  return shuffled;
+}
+
+function createQuestionDecks(): QuestionDecks {
+  return {
+    normal: shuffleItems(getQuestionBankByDifficulty("normal")),
+    competitiv: shuffleItems(getQuestionBankByDifficulty("competitiv")),
+    olimpic: shuffleItems(getQuestionBankByDifficulty("olimpic")),
+  };
+}
+
+function drawQuestionPack(nextDifficulty: Difficulty, decks: QuestionDecks) {
+  const currentDeck = decks[nextDifficulty];
+  const activeDeck =
+    currentDeck.length >= QUESTIONS_PER_QUIZ
+      ? currentDeck
+      : shuffleItems(getQuestionBankByDifficulty(nextDifficulty));
+
+  return {
+    nextQuestions: activeDeck.slice(0, QUESTIONS_PER_QUIZ),
+    nextDecks: {
+      ...decks,
+      [nextDifficulty]: activeDeck.slice(QUESTIONS_PER_QUIZ),
+    },
+  };
+}
 
 function getEvaluation(score: number): string {
   if (score >= 90) return "Excelent!";
@@ -99,8 +134,11 @@ function getTimeLabel(difficulty: Difficulty) {
 export default function Quiz() {
   const [screen, setScreen] = useState<Screen>("start");
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [questionDecks, setQuestionDecks] = useState<QuestionDecks>(() =>
+    createQuestionDecks()
+  );
   const [questions, setQuestions] = useState<Question[]>(() =>
-    getQuestionsByDifficulty("normal")
+    getQuestionBankByDifficulty("normal").slice(0, QUESTIONS_PER_QUIZ)
   );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -148,8 +186,11 @@ export default function Quiz() {
   }
 
   function startQuiz(d: Difficulty) {
+    const { nextQuestions, nextDecks } = drawQuestionPack(d, questionDecks);
+
+    setQuestionDecks(nextDecks);
     setDifficulty(d);
-    resetQuizState(getQuestionsByDifficulty(d), d);
+    resetQuizState(nextQuestions, d);
     setScreen("quiz");
   }
 
@@ -180,11 +221,17 @@ export default function Quiz() {
 
   function handleRestart() {
     setScreen("start");
-    resetQuizState(getQuestionsByDifficulty(difficulty), difficulty);
+    resetQuizState(questions, difficulty);
   }
 
   function handleRetakeSameLevel() {
-    resetQuizState(getQuestionsByDifficulty(difficulty), difficulty);
+    const { nextQuestions, nextDecks } = drawQuestionPack(
+      difficulty,
+      questionDecks
+    );
+
+    setQuestionDecks(nextDecks);
+    resetQuizState(nextQuestions, difficulty);
     setScreen("quiz");
   }
 
@@ -211,7 +258,7 @@ export default function Quiz() {
                   20
                 </div>
                 <span className="text-slate-600">
-                  Intrebari random fara repetari in aceeasi sesiune
+                  Intrebari pe runda, fara repetari pana se epuizeaza nivelul
                 </span>
               </div>
               <div className="flex items-center gap-3">
@@ -219,7 +266,7 @@ export default function Quiz() {
                   100
                 </div>
                 <span className="text-slate-600">
-                  Intrebari distincte pentru fiecare nivel
+                  Intrebari distincte pentru fiecare nivel de dificultate
                 </span>
               </div>
               <div className="flex items-center gap-3">
@@ -259,7 +306,7 @@ export default function Quiz() {
               Alege nivelul de dificultate
             </h2>
             <p className="text-slate-500">
-              Fiecare nivel contine {QUESTIONS_PER_LEVEL} de intrebari, iar quizul afiseaza {QUESTIONS_PER_QUIZ} random
+              Fiecare nivel contine {QUESTIONS_PER_LEVEL} de intrebari; quizul extrage pachete de {QUESTIONS_PER_QUIZ} fara suprapunere
             </p>
           </div>
 
@@ -307,6 +354,7 @@ export default function Quiz() {
     const ringColor = getScoreRingColor(score);
     const circumference = 2 * Math.PI * 54;
     const offset = circumference - (score / 100) * circumference;
+    const remainingInCycle = questionDecks[difficulty].length;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-50 flex items-center justify-center p-4">
@@ -319,7 +367,12 @@ export default function Quiz() {
             </div>
             <h2 className="text-2xl font-bold text-slate-800">Rezultate</h2>
             <p className="text-sm text-slate-400 mt-1">
-              Nivel: {diffInfo.label} - set de 20 din {questionBankSize}
+              Nivel: {diffInfo.label} - pachet de 20 din {questionBankSize}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              {remainingInCycle > 0
+                ? `Mai raman ${remainingInCycle} intrebari nefolosite in acest ciclu`
+                : "Banca nivelului a fost consumata; urmatoarea runda se reamesteca"}
             </p>
           </div>
 
@@ -398,7 +451,7 @@ export default function Quiz() {
               className={`w-full py-4 px-6 bg-gradient-to-r ${diffInfo.bgGradient} text-white font-semibold rounded-xl shadow-lg ${diffInfo.shadowColor} hover:shadow-xl transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 text-lg`}
             >
               <RotateCcw className="w-5 h-5" />
-              Reia Quizul cu intrebari random
+              Reia cu urmatorul pachet
             </button>
             <button
               onClick={() => setScreen("difficulty")}
